@@ -1,0 +1,11 @@
+# Парсер
+selenium==4.15.0
+webdriver-manager==4.0.1
+deep-translator==1.11.4
+
+# Telegram бот
+aiogram==3.21
+python-dotenv==1.0.0
+
+# Общее
+aiohttp==3.12.14
