@@ -2,7 +2,7 @@
 Encar Parser - Main Entry Point
 Парсер данных автомобилей с сайта Encar.com
 """
-import argparse
+
 from datetime import datetime
 
 from encar_parser.core.parser import EncarParser
@@ -14,21 +14,11 @@ def print_menu():
     print("ENCAR PARSER")
     print("=" * 50)
     print("Выберите режим:")
-    print("1. Обычный запуск (20 авто)")
+    print("1. Обычный запуск (20 авто) - ОТКЛЮЧЕНО")
     print("2. Парсинг одного автомобиля")
     print("3. Полный запуск (настраиваемый)")
     print("0. Выход")
     print("=" * 50)
-
-
-def mode_standard_run():
-    """Обычный запуск - 20 автомобилей"""
-    catalog_url = input("Введите URL каталога (или Enter для примера): ").strip()
-    if not catalog_url:
-        catalog_url = "https://www.encar.com/fc/fc_carsearchlist.do?carType=for"
-
-    parser = EncarParser(headless=False, enable_translation=True)
-    parser.parse_catalog(catalog_url, max_cars=20)
 
 
 def mode_single_car():
@@ -85,7 +75,9 @@ def mode_full_run():
 
     # Все параметры берутся из конфига
     brand_key = CATALOG_CONFIG["default_brand"]
+    max_cars = CATALOG_CONFIG.get("max_cars", 1000)
     max_pages = CATALOG_CONFIG.get("max_pages", 0)  # 0 = все страницы
+    start_page = CATALOG_CONFIG.get("start_page", 1)
 
     print("\n" + "=" * 60)
     print("ПОЛНЫЙ ЗАПУСК (параметры из config)")
@@ -103,16 +95,16 @@ def mode_full_run():
 
     # Создаем парсер
     parser = EncarParser(
-        headless=True,  # Всегда headless для автоматического режима
+        headless=False,  # Всегда headless для автоматического режима
         enable_translation=True,
         preset_brand=preset_brand,
     )
 
     # Запускаем парсинг
-    # max_cars можно тоже добавить в CATALOG_CONFIG
     parser.parse_catalog(
         brand_key=brand_key,
-        max_cars=1000,  # или из конфига
+        max_cars=max_cars,
+        start_page=start_page,
         max_pages=max_pages,
         filename=filename,
     )
@@ -128,7 +120,8 @@ def run_mode(choice):
             print("Выход из программы")
             exit(0)
         elif choice == "1":
-            mode_standard_run()
+            print("Режим отключен")
+            exit(0)
         elif choice == "2":
             mode_single_car()
         elif choice == "3":

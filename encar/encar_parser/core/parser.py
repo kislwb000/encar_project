@@ -72,27 +72,27 @@ class EncarParser:
             self.driver.quit()
             print("Драйвер закрыт")
 
-    def get_catalog_params(self, brand_key=None, page=1, max_pages=None):
+    def get_catalog_params(self, brand_key=None, start_page=None, max_pages=None):
         """
-        Получение параметров каталога (количество страниц)
+        Получение параметров каталога
 
         Args:
-            brand_key: Ключ марки из config (например, 'peugeot')
-            page: Номер текущей страницы
-            max_pages: Максимальное количество страниц (None = из конфига)
-
-        Returns:
-            int: Количество страниц для парсинга
+            brand_key: Ключ марки из config
+            start_page: Стартовая страница (None = из конфига)
+            max_pages: Максимум страниц (None = из конфига)
         """
         # Используем настройки из конфига
         if brand_key is None:
             brand_key = CATALOG_CONFIG["default_brand"]
 
+        if start_page is None:
+            start_page = CATALOG_CONFIG["start_page"]
+
         if max_pages is None:
             max_pages = CATALOG_CONFIG["max_pages"]
 
-        # Строим URL через функцию из конфига
-        catalog_url = build_catalog_url(brand_key, page=page)
+        # Строим URL со стартовой страницей
+        catalog_url = build_catalog_url(brand_key, page=start_page)
 
         self.scraper.open_url(catalog_url, wait_time=5)
         self.scraper.scroll_page(
@@ -106,41 +106,42 @@ class EncarParser:
 
         if cars_count == 0:
             print("Не удалось определить количество автомобилей")
-            return 0
+            return 0, start_page
 
         # Вычисляем количество страниц
         items_per_page = CATALOG_CONFIG["items_per_page"]
-        pages_count = cars_count // items_per_page
+        total_pages = cars_count // items_per_page
         if cars_count % items_per_page != 0:
-            pages_count += 1
+            total_pages += 1
 
         # Применяем ограничение
-        if max_pages and max_pages < pages_count:
-            pages_count = max_pages
-            print(f"Всего автомобилей: {cars_count}")
-            print(f"Выбрано страниц: {pages_count}")
+        if max_pages and max_pages > 0:
+            pages_to_parse = min(max_pages, total_pages - start_page + 1)
         else:
-            print(f"Всего автомобилей: {cars_count}")
-            print(f"Всего страниц: {pages_count}")
+            pages_to_parse = total_pages - start_page + 1
 
-        return pages_count
+        print(f"Всего автомобилей: {cars_count}")
+        print(f"Всего страниц: {total_pages}")
+        print(f"Начало с страницы: {start_page}")
+        print(f"Страниц для парсинга: {pages_to_parse}")
 
-    def get_car_links(self, brand_key=None, max_pages=None):
+        return pages_to_parse, start_page
+
+    def get_car_links(self, brand_key=None, start_page=None, max_pages=None):
         """
-        Получение ссылок на все автомобили из каталога
+        Получение ссылок на автомобили
 
         Args:
-            brand_key: Ключ марки из config (например, 'peugeot')
-            max_pages: Максимальное количество страниц
-
-        Returns:
-            list: Список ссылок на автомобили
+            brand_key: Ключ марки
+            start_page: Стартовая страница
+            max_pages: Максимум страниц
         """
-        # Используем настройки из конфига
         if brand_key is None:
             brand_key = CATALOG_CONFIG["default_brand"]
 
-        pages_count = self.get_catalog_params(brand_key, page=1, max_pages=max_pages)
+        pages_count, start_page = self.get_catalog_params(
+            brand_key, start_page=start_page, max_pages=max_pages
+        )
 
         if pages_count == 0:
             print("Не удалось получить информацию о страницах")
@@ -149,19 +150,18 @@ class EncarParser:
         car_links = []
 
         for i in range(pages_count):
-            page = i + 1
+            page = start_page + i
 
-            # Строим URL через функцию из конфига
             page_url = build_catalog_url(brand_key, page=page)
 
-            print(f"Открыта страница: {page}/{pages_count}")
+            print(f"Открыта страница: {page} ({i + 1}/{pages_count})")
             self.scraper.open_url(page_url, wait_time=5)
             self.scraper.scroll_page(
                 max_scrolls=self.settings.get("max_scrolls", 2),
                 pause=self.settings.get("scroll_pause", 2),
             )
 
-            # Ищем ссылки на автомобили
+            # Ищем ссылки
             for selector in CAR_LINK_SELECTORS:
                 elements = self.scraper.find_elements(selector)
                 print(f"  Селектор '{selector}': найдено {len(elements)} элементов")
@@ -177,7 +177,7 @@ class EncarParser:
                     except Exception:
                         continue
 
-        print(f"Найдено {len(car_links)} уникальных ссылок на автомобили")
+        print(f"Найдено {len(car_links)} уникальных ссылок")
         return car_links
 
     def extract_car_data(self, car_url, modal=None):
@@ -584,15 +584,23 @@ class EncarParser:
         except Exception as e:
             print(f"Ошибка сохранения debug информации: {e}")
 
-    def parse_catalog(self, brand_key=None, max_cars=50, max_pages=None, filename=None):
+    def parse_catalog(
+        self,
+        brand_key=None,
+        max_cars=None,
+        start_page=None,
+        max_pages=None,
+        filename=None,
+    ):
         """
         Основной метод парсинга каталога
 
         Args:
-            brand_key: Ключ марки из config (например, 'peugeot', 'bmw')
-            max_cars: Максимальное количество автомобилей
-            max_pages: Максимальное количество страниц
-            filename: Имя файла для сохранения
+            brand_key: Ключ марки
+            max_cars: Максимум автомобилей
+            start_page: Стартовая страница
+            max_pages: Максимум страниц
+            filename: Имя файла
         """
         start_time = time.time()
         self.logger.start()
@@ -601,13 +609,18 @@ class EncarParser:
             if brand_key is None:
                 brand_key = CATALOG_CONFIG["default_brand"]
 
+            if max_cars is None:
+                max_cars = CATALOG_CONFIG.get("max_cars", 1000)
+
             print("\n" + "=" * 60)
             print("НАЧАЛО ПАРСИНГА КАТАЛОГА")
             print(f"Марка: {brand_key.upper()} ({BRANDS[brand_key]})")
             print("=" * 60)
 
             # Получаем ссылки на автомобили
-            car_links = self.get_car_links(brand_key=brand_key, max_pages=max_pages)
+            car_links = self.get_car_links(
+                brand_key=brand_key, start_page=start_page, max_pages=max_pages
+            )
 
             if not car_links:
                 print("Не найдено ссылок на автомобили")
